@@ -1,5 +1,16 @@
 # Change Log
 
+## 1.19.1
+
+### Patch Changes
+
+- [#5450](https://github.com/medusajs/medusa/pull/5450) [`1d7888afc`](https://github.com/medusajs/medusa/commit/1d7888afca3900f8a29b72f8fd149fc3e1e2ea4a) Thanks [@fPolic](https://github.com/fPolic)! - feat(medusa, link-module): SalesChannel<>Product joiner config
+
+- [#5857](https://github.com/medusajs/medusa/pull/5857) [`2d79eeeec`](https://github.com/medusajs/medusa/commit/2d79eeeecc8086d30e7f26e45f2e1aa03ca14145) Thanks [@riqwan](https://github.com/riqwan)! - chore(medusa): add currency to region responses
+
+- Updated dependencies [[`1d7888afc`](https://github.com/medusajs/medusa/commit/1d7888afca3900f8a29b72f8fd149fc3e1e2ea4a)]:
+  - @medusajs/link-modules@0.2.6
+
 ## 1.19.0
 
 ### Minor Changes

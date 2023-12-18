@@ -1,5 +1,11 @@
 # @medusajs/link-modules
 
+## 0.2.6
+
+### Patch Changes
+
+- [#5450](https://github.com/medusajs/medusa/pull/5450) [`1d7888afc`](https://github.com/medusajs/medusa/commit/1d7888afca3900f8a29b72f8fd149fc3e1e2ea4a) Thanks [@fPolic](https://github.com/fPolic)! - feat(medusa, link-module): SalesChannel<>Product joiner config
+
 ## 0.2.5
 
 ### Patch Changes
