@@ -1,13 +1,16 @@
-import { Container, Heading } from "@medusajs/ui"
+import { Container } from "@medusajs/ui"
 import { keepPreviousData } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
-import { useState, useEffect } from "react"
+import { useMemo } from "react"
 
 import { DataTable } from "../../../../../components/data-table"
 import { useOrders } from "../../../../../hooks/api/orders"
 import { useOrderTableColumns } from "../../../../../hooks/table/columns/use-order-table-columns"
 import { useOrderTableFilters } from "../../../../../hooks/table/filters/use-order-table-filters"
 import { useOrderTableQuery } from "../../../../../hooks/table/query/use-order-table-query"
+import { useViewConfigurations } from "../../../../../hooks/use-view-configurations"
+import { useFeatureFlag } from "../../../../../providers/feature-flag-provider"
+import { useColumnState } from "../../../../../hooks/table/columns/use-column-state"
 
 import { DEFAULT_FIELDS } from "../../const"
 
@@ -15,9 +18,22 @@ const PAGE_SIZE = 20
 
 export const ConfigurableOrderListTable = () => {
   const { t } = useTranslation()
+  const isViewConfigEnabled = useFeatureFlag("view_configurations")
   
-  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({})
-  const [columnOrder, setColumnOrder] = useState<string[]>([])
+  // Get view configurations
+  const { activeView } = useViewConfigurations("orders")
+  
+  // Use column state hook
+  const {
+    visibleColumns,
+    columnOrder,
+    columnState,
+    currentColumns,
+    setColumnOrder,
+    handleColumnVisibilityChange,
+    handleViewChange,
+    initializeColumns,
+  } = useColumnState(undefined, activeView)
 
   const { searchParams, raw } = useOrderTableQuery({
     pageSize: PAGE_SIZE,
@@ -36,35 +52,10 @@ export const ConfigurableOrderListTable = () => {
   const filters = useOrderTableFilters()
   const columns = useOrderTableColumns({})
 
-  const handleViewChange = (view: any) => {
-    if (view) {
-      // Apply view configuration
-      const visibilityState: Record<string, boolean> = {}
-      const allColumns = columns.map(c => c.id!)
-      
-      // Set all columns to hidden first
-      allColumns.forEach(col => {
-        visibilityState[col] = false
-      })
-      
-      // Then show only the visible columns from the view
-      if (view.configuration?.visible_columns) {
-        view.configuration.visible_columns.forEach((col: string) => {
-          visibilityState[col] = true
-        })
-      }
-      
-      setColumnVisibility(visibilityState)
-      
-      if (view.configuration?.column_order) {
-        setColumnOrder(view.configuration.column_order)
-      }
-    } else {
-      // Reset to default (all visible)
-      setColumnVisibility({})
-      setColumnOrder([])
-    }
-  }
+  // Handle view change
+  const onViewChange = useMemo(() => {
+    return (view: any) => handleViewChange(view, [])
+  }, [handleViewChange])
 
   if (isError) {
     throw error
@@ -84,20 +75,15 @@ export const ConfigurableOrderListTable = () => {
         isLoading={isLoading}
         layout="fill"
         heading={t("orders.domain")}
-        enableColumnVisibility={true}
-        initialColumnVisibility={columnVisibility}
-        onColumnVisibilityChange={setColumnVisibility}
+        enableColumnVisibility={isViewConfigEnabled}
+        initialColumnVisibility={visibleColumns}
+        onColumnVisibilityChange={handleColumnVisibilityChange}
         columnOrder={columnOrder}
         onColumnOrderChange={setColumnOrder}
-        enableViewSelector={true}
+        enableViewSelector={isViewConfigEnabled}
         entity="orders"
-        onViewChange={handleViewChange}
-        currentColumns={{
-          visible: Object.entries(columnVisibility)
-            .filter(([_, visible]) => visible !== false)
-            .map(([col]) => col),
-          order: columnOrder.length > 0 ? columnOrder : columns.map(c => c.id!).filter(Boolean)
-        }}
+        onViewChange={onViewChange}
+        currentColumns={currentColumns}
         rowHref={(row) => `/orders/${row.id}`}
         emptyState={{
           message: t("orders.list.noRecordsMessage"),

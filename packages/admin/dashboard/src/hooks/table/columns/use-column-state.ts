@@ -1,10 +1,16 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react"
-import { HttpTypes } from "@medusajs/types"
+// import { HttpTypes } from "@medusajs/types"
 import type { ViewConfiguration } from "../../../hooks/use-view-configurations"
+
+interface ColumnState {
+  visibility: Record<string, boolean>
+  order: string[]
+}
 
 interface UseColumnStateReturn {
   visibleColumns: Record<string, boolean>
   columnOrder: string[]
+  columnState: ColumnState
   currentColumns: {
     visible: string[]
     order: string[]
@@ -12,12 +18,12 @@ interface UseColumnStateReturn {
   setVisibleColumns: (visibility: Record<string, boolean>) => void
   setColumnOrder: (order: string[]) => void
   handleColumnVisibilityChange: (visibility: Record<string, boolean>) => void
-  handleViewChange: (view: ViewConfiguration | null, apiColumns: HttpTypes.AdminViewColumn[]) => void
-  initializeColumns: (apiColumns: HttpTypes.AdminViewColumn[]) => void
+  handleViewChange: (view: ViewConfiguration | null, apiColumns: any[]) => void
+  initializeColumns: (apiColumns: any[]) => void
 }
 
 export function useColumnState(
-  apiColumns: HttpTypes.AdminViewColumn[] | undefined,
+  apiColumns: any[] | undefined,
   activeView?: ViewConfiguration | null
 ): UseColumnStateReturn {
   // Initialize state lazily to avoid unnecessary re-renders
@@ -45,6 +51,11 @@ export function useColumnState(
     return []
   })
 
+  const columnState = useMemo<ColumnState>(() => ({
+    visibility: visibleColumns,
+    order: columnOrder,
+  }), [visibleColumns, columnOrder])
+
   const currentColumns = useMemo(() => {
     const visible = Object.entries(visibleColumns)
       .filter(([_, isVisible]) => isVisible)
@@ -62,7 +73,7 @@ export function useColumnState(
 
   const handleViewChange = useCallback((
     view: ViewConfiguration | null,
-    apiColumns: HttpTypes.AdminViewColumn[]
+    apiColumns: any[]
   ) => {
     if (view) {
       // Apply view configuration
@@ -79,7 +90,7 @@ export function useColumnState(
     }
   }, [])
 
-  const initializeColumns = useCallback((apiColumns: HttpTypes.AdminViewColumn[]) => {
+  const initializeColumns = useCallback((apiColumns: any[]) => {
     // Only initialize if we don't already have column state
     if (Object.keys(visibleColumns).length === 0) {
       setVisibleColumns(getInitialColumnVisibility(apiColumns))
@@ -116,6 +127,7 @@ export function useColumnState(
   return {
     visibleColumns,
     columnOrder,
+    columnState,
     currentColumns,
     setVisibleColumns,
     setColumnOrder,
@@ -133,7 +145,7 @@ const DEFAULT_COLUMN_ORDER = 500
  * Gets the initial column visibility state from API columns
  */
 function getInitialColumnVisibility(
-  apiColumns: HttpTypes.AdminViewColumn[]
+  apiColumns: any[]
 ): Record<string, boolean> {
   const visibility: Record<string, boolean> = {}
   
@@ -148,7 +160,7 @@ function getInitialColumnVisibility(
  * Gets the initial column order from API columns
  */
 function getInitialColumnOrder(
-  apiColumns: HttpTypes.AdminViewColumn[]
+  apiColumns: any[]
 ): string[] {
   const sortedColumns = [...apiColumns].sort((a, b) => {
     const orderA = a.default_order ?? DEFAULT_COLUMN_ORDER
