@@ -248,24 +248,24 @@ const columns = [
         [
           {
             label: "Edit",
-            onClick: () => {},
+            onClick: () => { },
             icon: <PencilSquare />,
           },
           {
             label: "Edit",
-            onClick: () => {},
+            onClick: () => { },
             icon: <PencilSquare />,
           },
           {
             label: "Edit",
-            onClick: () => {},
+            onClick: () => { },
             icon: <PencilSquare />,
           },
         ],
         [
           {
             label: "Delete",
-            onClick: () => {},
+            onClick: () => { },
             icon: <Trash />,
           },
         ],
@@ -385,6 +385,13 @@ const KitchenSinkDemo = () => {
     },
   })
 
+  const handleFilteringChange = (
+    state: DataTableFilteringState,
+  ) => {
+    console.log("Filtering changed:", state)
+    setFiltering(state)
+  }
+
   const [pagination, setPagination] = React.useState<DataTablePaginationState>({
     pageIndex: 0,
     pageSize: 10,
@@ -414,7 +421,7 @@ const KitchenSinkDemo = () => {
     },
     filtering: {
       state: filtering,
-      onFilteringChange: setFiltering,
+      onFilteringChange: handleFilteringChange,
     },
     rowSelection: {
       state: rowSelection,

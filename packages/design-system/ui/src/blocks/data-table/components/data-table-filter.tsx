@@ -1,23 +1,34 @@
 "use client"
 
-import { CheckMini, EllipseMiniSolid, XMark } from "@medusajs/icons"
+import { CheckMini, EllipseMiniSolid, XMark, XMarkMini, MagnifyingGlass } from "@medusajs/icons"
 import * as React from "react"
 
 import { useDataTableContext } from "@/blocks/data-table/context/use-data-table-context"
 import type {
   DataTableDateComparisonOperator,
+  DataTableNumberComparisonOperator,
   DataTableDateFilterProps,
+  DataTableMultiselectFilterProps,
+  DataTableStringFilterProps,
+  DataTableNumberFilterProps,
+  DataTableCustomFilterProps,
   DataTableFilterOption,
 } from "@/blocks/data-table/types"
 import { isDateComparisonOperator } from "@/blocks/data-table/utils/is-date-comparison-operator"
 import { DatePicker } from "@/components/date-picker"
 import { Label } from "@/components/label"
 import { Popover } from "@/components/popover"
+import { Input } from "@/components/input"
+import { Select } from "@/components/select"
+import { Checkbox } from "@/components/checkbox"
 import { clx } from "@/utils/clx"
 
 interface DataTableFilterProps {
   id: string
   filter: unknown
+  isNew?: boolean
+  onUpdate?: (value: unknown) => void
+  onRemove?: () => void
 }
 
 const DEFAULT_FORMAT_DATE_VALUE = (d: Date) =>
@@ -30,60 +41,160 @@ const DEFAULT_RANGE_OPTION_LABEL = "Custom"
 const DEFAULT_RANGE_OPTION_START_LABEL = "Starting"
 const DEFAULT_RANGE_OPTION_END_LABEL = "Ending"
 
-const DataTableFilter = ({ id, filter }: DataTableFilterProps) => {
+const DataTableFilter = ({ id, filter, isNew = false, onUpdate, onRemove }: DataTableFilterProps) => {
   const { instance } = useDataTableContext()
-  const [open, setOpen] = React.useState(filter === undefined)
+
+  // Store if this filter should open on mount
+  const [shouldOpenOnMount] = React.useState(() => isNew)
+
+  const [open, setOpen] = React.useState(false)
   const [isCustom, setIsCustom] = React.useState(false)
+  const [hadPreviousValue, setHadPreviousValue] = React.useState(!shouldOpenOnMount)
+  const [hasInteracted, setHasInteracted] = React.useState(false)
+  const [previousFilter, setPreviousFilter] = React.useState(filter)
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Auto-open new filters after mount
+  React.useEffect(() => {
+    if (shouldOpenOnMount && !hasInteracted && !open) {
+      // Small delay to ensure proper positioning
+      const timer = setTimeout(() => {
+        setOpen(true)
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [shouldOpenOnMount, hasInteracted, open])
 
   const onOpenChange = React.useCallback(
     (open: boolean) => {
-      if (
-        !open &&
-        (!filter || (Array.isArray(filter) && filter.length === 0))
-      ) {
-        instance.removeFilter(id)
+      setOpen(open)
+
+      // Update hadPreviousValue and hasInteracted if filter has value
+      if (filter &&
+        !(Array.isArray(filter) && filter.length === 0) &&
+        !(typeof filter === 'string' && filter === '')) {
+        setHadPreviousValue(true)
+        setHasInteracted(true)
+        setPreviousFilter(filter)
       }
 
-      setOpen(open)
+      // Mark as interacted when closing
+      if (!open) {
+        setHasInteracted(true)
+      }
+
+      // Clear any existing timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+
+      // If closing without a value, remove filter after delay
+      // For new filters (shouldOpenOnMount), remove immediately when closing without value
+      if (!open &&
+        (filter === null ||
+          filter === undefined ||
+          (Array.isArray(filter) && filter.length === 0) ||
+          (typeof filter === 'string' && filter === ''))) {
+        const delay = shouldOpenOnMount && !hasInteracted ? 0 : 200
+        timeoutRef.current = setTimeout(() => {
+          if (onRemove) {
+            onRemove()
+          } else {
+            instance.removeFilter(id)
+          }
+        }, delay)
+      }
     },
-    [instance, id, filter]
+    [instance, id, filter, shouldOpenOnMount, hasInteracted, onRemove]
   )
 
   const removeFilter = React.useCallback(() => {
-    instance.removeFilter(id)
-  }, [instance, id])
+    // Clear timeout if removing manually
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+    if (onRemove) {
+      onRemove()
+    } else {
+      instance.removeFilter(id)
+    }
+  }, [instance, id, onRemove])
+
+  // Cleanup timeout on unmount
+  React.useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
 
   const meta = instance.getFilterMeta(id)
-  const { type, options, label, ...rest } = meta ?? {}
+
+  if (!meta) {
+    return null
+  }
+
+  const { type, label, ...rest } = meta
+  const options = (meta as any).options
+
+  // Helper to check if filter has a meaningful value
+  const hasValue = React.useMemo(() => {
+    if (filter === null || filter === undefined) return false
+    if (typeof filter === "string" && filter === "") return false
+    if (Array.isArray(filter) && filter.length === 0) return false
+    if (typeof filter === "number") return true
+    if (isDateComparisonOperator(filter)) {
+      return !!(filter.$gte || filter.$lte || filter.$gt || filter.$lt)
+    }
+    if (typeof filter === "object" && filter !== null) {
+      // For number comparison operators
+      const keys = Object.keys(filter)
+      return keys.length > 0 && (filter as any)[keys[0]] !== null && (filter as any)[keys[0]] !== undefined
+    }
+    return true
+  }, [filter])
 
   const { displayValue, isCustomRange } = React.useMemo(() => {
+    // Use previous filter value if current filter is empty and popover is closing
+    const effectiveFilter = (hasValue || !open) ? filter : previousFilter
+
     let displayValue: string | null = null
     let isCustomRange = false
 
-    if (typeof filter === "string") {
-      displayValue = options?.find((o) => o.value === filter)?.label ?? null
+    if (typeof effectiveFilter === "string") {
+      // For string filters without options, just show the value
+      if (!options || options.length === 0) {
+        displayValue = effectiveFilter
+      } else {
+        displayValue = options?.find((o: any) => o.value === effectiveFilter)?.label ?? null
+      }
     }
 
-    if (Array.isArray(filter)) {
+    if (typeof effectiveFilter === "number") {
+      displayValue = String(effectiveFilter)
+    }
+
+    if (Array.isArray(effectiveFilter)) {
       displayValue =
-        filter
-          .map((v) => options?.find((o) => o.value === v)?.label)
+        effectiveFilter
+          .map((v) => options?.find((o: any) => o.value === v)?.label)
           .join(", ") ?? null
     }
 
-    if (isDateComparisonOperator(filter)) {
+    if (isDateComparisonOperator(effectiveFilter)) {
       displayValue =
-        options?.find((o) => {
+        options?.find((o: any) => {
           if (!isDateComparisonOperator(o.value)) {
             return false
           }
 
           return (
             !isCustom &&
-            (filter.$gte === o.value.$gte || (!filter.$gte && !o.value.$gte)) &&
-            (filter.$lte === o.value.$lte || (!filter.$lte && !o.value.$lte)) &&
-            (filter.$gt === o.value.$gt || (!filter.$gt && !o.value.$gt)) &&
-            (filter.$lt === o.value.$lt || (!filter.$lt && !o.value.$lt))
+            (effectiveFilter.$gte === o.value.$gte || (!effectiveFilter.$gte && !o.value.$gte)) &&
+            (effectiveFilter.$lte === o.value.$lte || (!effectiveFilter.$lte && !o.value.$lte)) &&
+            (effectiveFilter.$gt === o.value.$gt || (!effectiveFilter.$gt && !o.value.$gt)) &&
+            (effectiveFilter.$lt === o.value.$lt || (!effectiveFilter.$lt && !o.value.$lt))
           )
         })?.label ?? null
 
@@ -92,31 +203,48 @@ const DataTableFilter = ({ id, filter }: DataTableFilterProps) => {
           ? meta.formatDateValue
           : DEFAULT_FORMAT_DATE_VALUE
 
-        if (filter.$gte && !filter.$lte) {
+        if (effectiveFilter.$gte && !effectiveFilter.$lte) {
           isCustomRange = true
-          displayValue = `${
-            meta.rangeOptionStartLabel || DEFAULT_RANGE_OPTION_START_LABEL
-          } ${formatDateValue(new Date(filter.$gte))}`
+          displayValue = `${meta.rangeOptionStartLabel || DEFAULT_RANGE_OPTION_START_LABEL
+            } ${formatDateValue(new Date(effectiveFilter.$gte))}`
         }
 
-        if (filter.$lte && !filter.$gte) {
+        if (effectiveFilter.$lte && !effectiveFilter.$gte) {
           isCustomRange = true
-          displayValue = `${
-            meta.rangeOptionEndLabel || DEFAULT_RANGE_OPTION_END_LABEL
-          } ${formatDateValue(new Date(filter.$lte))}`
+          displayValue = `${meta.rangeOptionEndLabel || DEFAULT_RANGE_OPTION_END_LABEL
+            } ${formatDateValue(new Date(effectiveFilter.$lte))}`
         }
 
-        if (filter.$gte && filter.$lte) {
+        if (effectiveFilter.$gte && effectiveFilter.$lte) {
           isCustomRange = true
           displayValue = `${formatDateValue(
-            new Date(filter.$gte)
-          )} - ${formatDateValue(new Date(filter.$lte))}`
+            new Date(effectiveFilter.$gte)
+          )} - ${formatDateValue(new Date(effectiveFilter.$lte))}`
         }
       }
     }
 
+    // Handle number comparison operators
+    if (typeof effectiveFilter === "object" && effectiveFilter !== null && !Array.isArray(effectiveFilter) && !isDateComparisonOperator(effectiveFilter)) {
+      const operators: Record<string, string> = {
+        $eq: "=",
+        $gt: ">",
+        $gte: "≥",
+        $lt: "<",
+        $lte: "≤",
+      }
+
+      const op = Object.keys(effectiveFilter)[0]
+      const opLabel = operators[op] || op
+      const value = (effectiveFilter as any)[op]
+
+      if (typeof value === "number") {
+        displayValue = `${opLabel} ${value}`
+      }
+    }
+
     return { displayValue, isCustomRange }
-  }, [filter, options])
+  }, [filter, previousFilter, options, open, hasValue])
 
   React.useEffect(() => {
     if (isCustomRange && !isCustom) {
@@ -124,53 +252,93 @@ const DataTableFilter = ({ id, filter }: DataTableFilterProps) => {
     }
   }, [isCustomRange, isCustom])
 
-  if (!meta) {
-    return null
-  }
-
   return (
     <Popover open={open} onOpenChange={onOpenChange} modal>
-      <Popover.Anchor asChild>
+      <div
+        className={clx(
+          "bg-ui-bg-field flex flex-shrink-0 items-stretch overflow-hidden rounded-md",
+          "txt-compact-small-plus shadow-borders-base"
+        )}
+      >
+        {!hadPreviousValue && <Popover.Anchor />}
         <div
           className={clx(
-            "bg-ui-bg-component flex flex-shrink-0 items-center overflow-hidden rounded-md",
-            "[&>*]:txt-compact-small-plus [&>*]:flex [&>*]:items-center [&>*]:justify-center",
+            "flex items-center px-2 py-1 text-ui-fg-muted",
             {
-              "shadow-borders-base divide-x": displayValue,
-              "border border-dashed": !displayValue,
+              "border-r": hasValue || hadPreviousValue
             }
           )}
         >
-          {displayValue && (
-            <div className="text-ui-fg-muted whitespace-nowrap px-2 py-1">
-              {label || id}
-            </div>
-          )}
-          <Popover.Trigger
-            className={clx(
-              "text-ui-fg-subtle hover:bg-ui-bg-base-hover active:bg-ui-bg-base-pressed transition-fg whitespace-nowrap px-2 py-1 outline-none",
-              {
-                "text-ui-fg-muted": !displayValue,
-              }
+          {label || id}
+        </div>
+        {(hasValue || hadPreviousValue) && (
+          <>
+            {(type === "select" || type === "multiselect" || type === "radio") && (
+              <div className="flex items-center border-r px-2 py-1 text-ui-fg-muted">
+                is
+              </div>
             )}
-          >
-            {displayValue || label || id}
-          </Popover.Trigger>
-
-          {displayValue && (
+            <Popover.Trigger asChild>
+              <button
+                className={clx(
+                  "flex flex-1 items-center px-2 py-1 outline-none",
+                  "hover:bg-ui-bg-base-hover active:bg-ui-bg-base-pressed transition-fg",
+                  {
+                    "text-ui-fg-subtle": displayValue,
+                    "text-ui-fg-muted": !displayValue,
+                    "min-w-[80px] justify-center": !displayValue,
+                    "border-r": true
+                  }
+                )}
+              >
+                {displayValue || "\u00A0"}
+              </button>
+            </Popover.Trigger>
             <button
               type="button"
-              className="text-ui-fg-muted hover:bg-ui-bg-base-hover active:bg-ui-bg-base-pressed transition-fg size-7 outline-none"
+              className="flex size-7 items-center justify-center text-ui-fg-muted outline-none hover:bg-ui-bg-base-hover active:bg-ui-bg-base-pressed transition-fg"
               onClick={removeFilter}
             >
               <XMark />
             </button>
-          )}
-        </div>
-      </Popover.Anchor>
+          </>
+        )}
+      </div>
       <Popover.Content
         align="start"
+        sideOffset={8}
+        collisionPadding={16}
+        hideWhenDetached
         className="bg-ui-bg-component p-0 outline-none"
+        onOpenAutoFocus={(e) => {
+          // Don't use preventDefault for auto-focus
+          // Let the natural focus flow work
+          if (shouldOpenOnMount) {
+            // For new filters, ensure the first input gets focus
+            setTimeout(() => {
+              const content = e.currentTarget as HTMLElement
+              if (content) {
+                const firstInput = content.querySelector(
+                  'input:not([type="hidden"]), [role="list"][tabindex="0"]'
+                ) as HTMLElement
+                if (firstInput) {
+                  firstInput.focus()
+                }
+              }
+            }, 0)
+          }
+        }}
+        onCloseAutoFocus={(e) => {
+          // Prevent focus from going to the trigger when closing
+          e.preventDefault()
+        }}
+        onInteractOutside={(e) => {
+          // Check if the click is on a filter menu item
+          const target = e.target as HTMLElement
+          if (target.closest('[role="menuitem"]')) {
+            e.preventDefault()
+          }
+        }}
       >
         {(() => {
           switch (type) {
@@ -180,6 +348,8 @@ const DataTableFilter = ({ id, filter }: DataTableFilterProps) => {
                   id={id}
                   filter={filter as string[] | undefined}
                   options={options as DataTableFilterOption<string>[]}
+                  isNew={shouldOpenOnMount}
+                  onUpdate={onUpdate}
                 />
               )
             case "radio":
@@ -188,9 +358,11 @@ const DataTableFilter = ({ id, filter }: DataTableFilterProps) => {
                   id={id}
                   filter={filter}
                   options={options as DataTableFilterOption<string>[]}
+                  onUpdate={onUpdate}
                 />
               )
             case "date":
+              const dateRest = rest as Omit<DataTableDateFilterProps, 'id' | 'type' | 'label' | 'options'>
               return (
                 <DataTableFilterDateContent
                   id={id}
@@ -200,7 +372,55 @@ const DataTableFilter = ({ id, filter }: DataTableFilterProps) => {
                   }
                   isCustom={isCustom}
                   setIsCustom={setIsCustom}
-                  {...rest}
+                  format={dateRest.format}
+                  rangeOptionLabel={dateRest.rangeOptionLabel}
+                  disableRangeOption={dateRest.disableRangeOption}
+                  rangeOptionStartLabel={dateRest.rangeOptionStartLabel}
+                  rangeOptionEndLabel={dateRest.rangeOptionEndLabel}
+                  onUpdate={onUpdate}
+                />
+              )
+            case "multiselect":
+              const multiselectRest = rest as Omit<DataTableMultiselectFilterProps, 'id' | 'type' | 'label' | 'options'>
+              return (
+                <DataTableFilterMultiselectContent
+                  id={id}
+                  filter={filter as string[] | undefined}
+                  options={options as DataTableFilterOption<string>[]}
+                  searchable={multiselectRest.searchable}
+                  onUpdate={onUpdate}
+                />
+              )
+            case "string":
+              const stringRest = rest as Omit<DataTableStringFilterProps, 'id' | 'type' | 'label'>
+              return (
+                <DataTableFilterStringContent
+                  id={id}
+                  filter={filter as string | undefined}
+                  placeholder={stringRest.placeholder}
+                  onUpdate={onUpdate}
+                />
+              )
+            case "number":
+              const numberRest = rest as Omit<DataTableNumberFilterProps, 'id' | 'type' | 'label'>
+              return (
+                <DataTableFilterNumberContent
+                  id={id}
+                  filter={filter}
+                  placeholder={numberRest.placeholder}
+                  includeOperators={numberRest.includeOperators}
+                  onUpdate={onUpdate}
+                />
+              )
+            case "custom":
+              const customRest = rest as Omit<DataTableCustomFilterProps, 'id' | 'type' | 'label'>
+              return (
+                <DataTableFilterCustomContent
+                  id={id}
+                  filter={filter}
+                  onRemove={removeFilter}
+                  render={customRest.render}
+                  onUpdate={onUpdate}
                 />
               )
             default:
@@ -219,6 +439,7 @@ type DataTableFilterDateContentProps = {
   options: DataTableFilterOption<DataTableDateComparisonOperator>[]
   isCustom: boolean
   setIsCustom: (isCustom: boolean) => void
+  onUpdate?: (value: unknown) => void
 } & Pick<
   DataTableDateFilterProps,
   | "format"
@@ -239,6 +460,7 @@ const DataTableFilterDateContent = ({
   disableRangeOption = false,
   isCustom,
   setIsCustom,
+  onUpdate,
 }: DataTableFilterDateContentProps) => {
   const currentValue = filter as DataTableDateComparisonOperator | undefined
   const { instance } = useDataTableContext()
@@ -256,23 +478,35 @@ const DataTableFilterDateContent = ({
       setIsCustom(false)
 
       const value = JSON.parse(valueStr) as DataTableDateComparisonOperator
-      instance.updateFilter({ id, value })
+      if (onUpdate) {
+        onUpdate(value)
+      } else {
+        instance.updateFilter({ id, value })
+      }
     },
-    [instance, id]
+    [instance, id, onUpdate]
   )
 
   const onSelectCustom = React.useCallback(() => {
     setIsCustom(true)
-    instance.updateFilter({ id, value: undefined })
-  }, [instance, id])
+    if (onUpdate) {
+      onUpdate(undefined)
+    } else {
+      instance.updateFilter({ id, value: undefined })
+    }
+  }, [instance, id, onUpdate])
 
   const onCustomValueChange = React.useCallback(
     (input: "$gte" | "$lte", value: Date | null) => {
       const newCurrentValue = { ...currentValue }
       newCurrentValue[input] = value ? value.toISOString() : undefined
-      instance.updateFilter({ id, value: newCurrentValue })
+      if (onUpdate) {
+        onUpdate(newCurrentValue)
+      } else {
+        instance.updateFilter({ id, value: newCurrentValue })
+      }
     },
-    [instance, id]
+    [instance, id, currentValue, onUpdate]
   )
 
   const { focusedIndex, setFocusedIndex } = useKeyboardNavigation(
@@ -392,68 +626,105 @@ type DataTableFilterSelectContentProps = {
   id: string
   filter?: string[]
   options: DataTableFilterOption<string>[]
+  isNew?: boolean
+  onUpdate?: (value: unknown) => void
 }
 
 const DataTableFilterSelectContent = ({
   id,
   filter = [],
   options,
+  isNew = false,
+  onUpdate,
 }: DataTableFilterSelectContentProps) => {
   const { instance } = useDataTableContext()
+  const [search, setSearch] = React.useState("")
+
+  const filteredOptions = React.useMemo(() => {
+    if (!search) return options
+
+    const searchLower = search.toLowerCase()
+    return options.filter(opt =>
+      opt.label.toLowerCase().includes(searchLower)
+    )
+  }, [options, search])
 
   const onValueChange = React.useCallback(
     (value: string) => {
       if (filter?.includes(value)) {
         const newValues = filter?.filter((v) => v !== value)
-        instance.updateFilter({
-          id,
-          value: newValues,
-        })
+        const newValue = newValues.length > 0 ? newValues : undefined
+        if (onUpdate) {
+          onUpdate(newValue)
+        } else {
+          instance.updateFilter({
+            id,
+            value: newValue,
+          })
+        }
       } else {
-        instance.updateFilter({
-          id,
-          value: [...(filter ?? []), value],
-        })
+        const newValue = [...(filter ?? []), value]
+        if (onUpdate) {
+          onUpdate(newValue)
+        } else {
+          instance.updateFilter({
+            id,
+            value: newValue,
+          })
+        }
       }
     },
-    [instance, id, filter]
+    [instance, id, filter, onUpdate]
   )
-
-  const { focusedIndex, setFocusedIndex } = useKeyboardNavigation(
-    options,
-    (index) => onValueChange(options[index].value)
-  )
-
-  const onListFocus = React.useCallback(() => {
-    if (focusedIndex === -1) {
-      setFocusedIndex(0)
-    }
-  }, [focusedIndex])
 
   return (
-    <div
-      className="flex flex-col p-1 outline-none"
-      role="list"
-      tabIndex={0}
-      onFocus={onListFocus}
-      autoFocus
-    >
-      {options.map((option, idx) => {
-        const isSelected = !!filter?.includes(option.value)
+    <div className="w-[250px]">
+      <div className="flex items-center gap-x-2 border-b px-3 py-1.5">
+        <MagnifyingGlass className="h-4 w-4 text-ui-fg-muted" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search..."
+          className="h-8 flex-1 bg-transparent text-sm outline-none placeholder:text-ui-fg-muted"
+          autoFocus
+        />
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            className="text-ui-fg-muted hover:text-ui-fg-subtle"
+          >
+            <XMarkMini className="h-4 w-4" />
+          </button>
+        )}
+      </div>
 
-        return (
-          <OptionButton
-            key={idx}
-            index={idx}
-            option={option}
-            isSelected={isSelected}
-            isFocused={focusedIndex === idx}
-            onClick={() => onValueChange(option.value)}
-            onMouseEvent={setFocusedIndex}
-            icon={CheckMini}
-          />
-        )
-      })}
+      <div className="max-h-[300px] overflow-auto p-1">
+        {filteredOptions.length === 0 && (
+          <div className="py-6 text-center text-sm text-ui-fg-muted">
+            No results found
+          </div>
+        )}
+
+        {filteredOptions.map(option => {
+          const isSelected = filter?.includes(option.value)
+
+          return (
+            <button
+              key={String(option.value)}
+              onClick={() => onValueChange(option.value)}
+              className={clx(
+                "flex w-full cursor-pointer items-center gap-x-2 rounded-md px-2 py-1.5 text-sm text-left",
+                "hover:bg-ui-bg-base-hover"
+              )}
+            >
+              <div className="flex size-[15px] items-center justify-center">
+                {isSelected && <CheckMini />}
+              </div>
+              <span>{option.label}</span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -462,20 +733,26 @@ type DataTableFilterRadioContentProps = {
   id: string
   filter: unknown
   options: DataTableFilterOption<string>[]
+  onUpdate?: (value: unknown) => void
 }
 
 const DataTableFilterRadioContent = ({
   id,
   filter,
   options,
+  onUpdate,
 }: DataTableFilterRadioContentProps) => {
   const { instance } = useDataTableContext()
 
   const onValueChange = React.useCallback(
     (value: string) => {
-      instance.updateFilter({ id, value })
+      if (onUpdate) {
+        onUpdate(value)
+      } else {
+        instance.updateFilter({ id, value })
+      }
     },
-    [instance, id]
+    [instance, id, onUpdate]
   )
 
   const { focusedIndex, setFocusedIndex } = useKeyboardNavigation(
@@ -523,6 +800,38 @@ function isDateFilterProps(props?: unknown | null): props is DataTableDateFilter
   }
 
   return (props as DataTableDateFilterProps).type === "date"
+}
+
+function isMultiselectFilterProps(props?: unknown | null): props is DataTableMultiselectFilterProps {
+  if (!props) {
+    return false
+  }
+
+  return (props as DataTableMultiselectFilterProps).type === "multiselect"
+}
+
+function isStringFilterProps(props?: unknown | null): props is DataTableStringFilterProps {
+  if (!props) {
+    return false
+  }
+
+  return (props as DataTableStringFilterProps).type === "string"
+}
+
+function isNumberFilterProps(props?: unknown | null): props is DataTableNumberFilterProps {
+  if (!props) {
+    return false
+  }
+
+  return (props as DataTableNumberFilterProps).type === "number"
+}
+
+function isCustomFilterProps(props?: unknown | null): props is DataTableCustomFilterProps {
+  if (!props) {
+    return false
+  }
+
+  return (props as DataTableCustomFilterProps).type === "custom"
 }
 
 type OptionButtonProps = {
@@ -610,6 +919,426 @@ function useKeyboardNavigation(
   }, [onKeyDown])
 
   return { focusedIndex, setFocusedIndex }
+}
+
+type DataTableFilterMultiselectContentProps = {
+  id: string
+  filter?: string[]
+  options: DataTableFilterOption<string>[]
+  searchable?: boolean
+  onUpdate?: (value: unknown) => void
+}
+
+const DataTableFilterMultiselectContent = ({
+  id,
+  filter = [],
+  options,
+  searchable = true,
+  onUpdate,
+}: DataTableFilterMultiselectContentProps) => {
+  const { instance } = useDataTableContext()
+  const [search, setSearch] = React.useState("")
+
+  const filteredOptions = React.useMemo(() => {
+    if (!searchable || !search) return options
+
+    const searchLower = search.toLowerCase()
+    return options.filter(opt =>
+      opt.label.toLowerCase().includes(searchLower)
+    )
+  }, [options, search, searchable])
+
+  const onValueChange = React.useCallback(
+    (value: string) => {
+      if (filter?.includes(value)) {
+        const newValues = filter?.filter((v) => v !== value)
+        const newValue = newValues.length > 0 ? newValues : undefined
+        if (onUpdate) {
+          onUpdate(newValue)
+        } else {
+          instance.updateFilter({
+            id,
+            value: newValue,
+          })
+        }
+      } else {
+        const newValue = [...(filter ?? []), value]
+        if (onUpdate) {
+          onUpdate(newValue)
+        } else {
+          instance.updateFilter({
+            id,
+            value: newValue,
+          })
+        }
+      }
+    },
+    [instance, id, filter, onUpdate]
+  )
+
+  if (!searchable) {
+    return (
+      <div className="w-[250px]">
+        <div className="max-h-[300px] overflow-auto p-1">
+          {options.map(option => {
+            const isSelected = filter?.includes(option.value)
+
+            return (
+              <button
+                key={String(option.value)}
+                onClick={() => onValueChange(option.value)}
+                className={clx(
+                  "flex w-full items-center gap-x-2 rounded-md px-2 py-1.5 text-sm",
+                  "hover:bg-ui-bg-base-hover cursor-pointer text-left"
+                )}
+              >
+                <Checkbox
+                  checked={isSelected}
+                  className="pointer-events-none"
+                />
+                <span>{option.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-[250px]">
+      <div className="flex items-center gap-x-2 border-b px-3 py-1.5">
+        <MagnifyingGlass className="h-4 w-4 text-ui-fg-muted" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search..."
+          className="h-8 flex-1 bg-transparent text-sm outline-none placeholder:text-ui-fg-muted"
+          autoFocus
+        />
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            className="text-ui-fg-muted hover:text-ui-fg-subtle"
+          >
+            <XMarkMini className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      <div className="max-h-[300px] overflow-auto p-1">
+        {filteredOptions.length === 0 && (
+          <div className="py-6 text-center text-sm text-ui-fg-muted">
+            No results found
+          </div>
+        )}
+
+        {filteredOptions.map(option => {
+          const isSelected = filter?.includes(option.value)
+
+          return (
+            <button
+              key={String(option.value)}
+              onClick={() => onValueChange(option.value)}
+              className={clx(
+                "flex w-full cursor-pointer items-center gap-x-2 rounded-md px-2 py-1.5 text-sm text-left",
+                "hover:bg-ui-bg-base-hover"
+              )}
+            >
+              <Checkbox
+                checked={isSelected}
+                className="pointer-events-none"
+              />
+              <span>{option.label}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+type DataTableFilterStringContentProps = {
+  id: string
+  filter?: string
+  placeholder?: string
+  onUpdate?: (value: unknown) => void
+}
+
+const DataTableFilterStringContent = ({
+  id,
+  filter,
+  placeholder = "Enter value...",
+  onUpdate,
+}: DataTableFilterStringContentProps) => {
+  const { instance } = useDataTableContext()
+  const [value, setValue] = React.useState(filter || "")
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleChange = React.useCallback((newValue: string) => {
+    setValue(newValue)
+
+    // Clear existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+
+    // Debounce the update
+    timeoutRef.current = setTimeout(() => {
+      const updateValue = newValue.trim() || undefined
+      if (onUpdate) {
+        onUpdate(updateValue)
+      } else {
+        instance.updateFilter({
+          id,
+          value: updateValue,
+        })
+      }
+    }, 500)
+  }, [instance, id, onUpdate])
+
+  // Cleanup timeout on unmount
+  React.useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
+
+  const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      // Clear timeout and apply immediately
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+      const updateValue = value.trim() || undefined
+      if (onUpdate) {
+        onUpdate(updateValue)
+      } else {
+        instance.updateFilter({
+          id,
+          value: updateValue,
+        })
+      }
+    }
+  }, [instance, id, value, onUpdate])
+
+  return (
+    <div className="p-3 w-[250px]">
+      <Input
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        onKeyDown={handleKeyDown}
+        autoFocus
+      />
+    </div>
+  )
+}
+
+type DataTableFilterNumberContentProps = {
+  id: string
+  filter: any
+  placeholder?: string
+  includeOperators?: boolean
+  onUpdate?: (value: unknown) => void
+}
+
+const DataTableFilterNumberContent = ({
+  id,
+  filter,
+  placeholder = "Enter number...",
+  includeOperators = true,
+  onUpdate,
+}: DataTableFilterNumberContentProps) => {
+  const { instance } = useDataTableContext()
+  const [operator, setOperator] = React.useState<string>("eq")
+  const [value, setValue] = React.useState("")
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(() => {
+    if (filter) {
+      if (typeof filter === "number") {
+        setOperator("eq")
+        setValue(String(filter))
+      } else if (typeof filter === "object") {
+        const op = Object.keys(filter)[0] as string
+        setOperator(op.replace("$", ""))
+        setValue(String(filter[op]))
+      }
+    }
+  }, [filter])
+
+  const handleValueChange = React.useCallback((newValue: string) => {
+    setValue(newValue)
+
+    // Clear existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+
+    // Debounce the update
+    timeoutRef.current = setTimeout(() => {
+      const num = parseFloat(newValue)
+      if (!isNaN(num)) {
+        const filterValue = includeOperators && operator !== "eq"
+          ? { [`$${operator}`]: num }
+          : num
+
+        if (onUpdate) {
+          onUpdate(filterValue)
+        } else {
+          instance.updateFilter({
+            id,
+            value: filterValue,
+          })
+        }
+      } else if (newValue === "") {
+        if (onUpdate) {
+          onUpdate(undefined)
+        } else {
+          instance.updateFilter({
+            id,
+            value: undefined,
+          })
+        }
+      }
+    }, 500)
+  }, [instance, id, operator, includeOperators, onUpdate])
+
+  const handleOperatorChange = React.useCallback((newOperator: string) => {
+    setOperator(newOperator)
+
+    // If we have a value, update immediately with new operator
+    const num = parseFloat(value)
+    if (!isNaN(num)) {
+      const filterValue = includeOperators && newOperator !== "eq"
+        ? { [`$${newOperator}`]: num }
+        : num
+
+      if (onUpdate) {
+        onUpdate(filterValue)
+      } else {
+        instance.updateFilter({
+          id,
+          value: filterValue,
+        })
+      }
+    }
+  }, [instance, id, value, includeOperators, onUpdate])
+
+  // Cleanup timeout on unmount
+  React.useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
+
+  const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      // Clear timeout and apply immediately
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+      const num = parseFloat(value)
+      if (!isNaN(num)) {
+        const filterValue = includeOperators && operator !== "eq"
+          ? { [`$${operator}`]: num }
+          : num
+
+        if (onUpdate) {
+          onUpdate(filterValue)
+        } else {
+          instance.updateFilter({
+            id,
+            value: filterValue,
+          })
+        }
+      }
+    }
+  }, [instance, id, value, operator, includeOperators, onUpdate])
+
+  const operators = [
+    { value: "eq", label: "Equals" },
+    { value: "gt", label: "Greater than" },
+    { value: "gte", label: "Greater than or equal" },
+    { value: "lt", label: "Less than" },
+    { value: "lte", label: "Less than or equal" },
+  ]
+
+  return (
+    <div className="p-3 space-y-3 w-[250px]">
+      {includeOperators && (
+        <Select value={operator} onValueChange={handleOperatorChange}>
+          <Select.Trigger>
+            <Select.Value />
+          </Select.Trigger>
+          <Select.Content>
+            {operators.map(op => (
+              <Select.Item key={op.value} value={op.value}>
+                {op.label}
+              </Select.Item>
+            ))}
+          </Select.Content>
+        </Select>
+      )}
+
+      <Input
+        type="number"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => handleValueChange(e.target.value)}
+        onKeyDown={handleKeyDown}
+        autoFocus={!includeOperators}
+      />
+    </div>
+  )
+}
+
+type DataTableFilterCustomContentProps = {
+  id: string
+  filter: any
+  onRemove: () => void
+  render: (props: {
+    value: any
+    onChange: (value: any) => void
+    onRemove: () => void
+  }) => React.ReactNode
+  onUpdate?: (value: unknown) => void
+}
+
+const DataTableFilterCustomContent = ({
+  id,
+  filter,
+  onRemove,
+  render,
+  onUpdate,
+}: DataTableFilterCustomContentProps) => {
+  const { instance } = useDataTableContext()
+
+  const handleChange = React.useCallback((value: any) => {
+    if (onUpdate) {
+      onUpdate(value)
+    } else {
+      instance.updateFilter({
+        id,
+        value,
+      })
+    }
+  }, [instance, id, onUpdate])
+
+  return (
+    <>
+      {render({
+        value: filter,
+        onChange: handleChange,
+        onRemove,
+      })}
+    </>
+  )
 }
 
 export { DataTableFilter }
