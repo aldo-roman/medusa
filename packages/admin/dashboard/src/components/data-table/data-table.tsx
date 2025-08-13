@@ -385,6 +385,8 @@ export const DataTable = <TData,>({
             )}
           </div>
           <div className="flex items-center gap-x-2">
+            {enableFiltering && <UiDataTable.FilterMenu />}
+            {enableSorting && <UiDataTable.SortingMenu />}
             {enableSearch && (
               <div className="w-full md:w-auto">
                 <UiDataTable.Search

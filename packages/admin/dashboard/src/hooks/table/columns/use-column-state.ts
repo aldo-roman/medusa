@@ -28,11 +28,11 @@ export function useColumnState(
 ): UseColumnStateReturn {
   // Initialize state lazily to avoid unnecessary re-renders
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
-    if (apiColumns?.length && activeView) {
+    if (apiColumns?.length && activeView?.configuration) {
       // If there's an active view, initialize with its configuration
       const visibility: Record<string, boolean> = {}
       apiColumns.forEach(column => {
-        visibility[column.field] = activeView.configuration.visible_columns.includes(column.field)
+        visibility[column.field] = activeView.configuration.visible_columns?.includes(column.field) || false
       })
       return visibility
     } else if (apiColumns?.length) {
@@ -42,9 +42,9 @@ export function useColumnState(
   })
 
   const [columnOrder, setColumnOrder] = useState<string[]>(() => {
-    if (activeView) {
+    if (activeView?.configuration?.column_order) {
       // If there's an active view, use its column order
-      return activeView.configuration.column_order || []
+      return activeView.configuration.column_order
     } else if (apiColumns?.length) {
       return getInitialColumnOrder(apiColumns)
     }
@@ -75,14 +75,14 @@ export function useColumnState(
     view: ViewConfiguration | null,
     apiColumns: any[]
   ) => {
-    if (view) {
+    if (view?.configuration) {
       // Apply view configuration
       const newVisibility: Record<string, boolean> = {}
       apiColumns.forEach(column => {
-        newVisibility[column.field] = view.configuration.visible_columns.includes(column.field)
+        newVisibility[column.field] = view.configuration.visible_columns?.includes(column.field) || false
       })
       setVisibleColumns(newVisibility)
-      setColumnOrder(view.configuration.column_order)
+      setColumnOrder(view.configuration.column_order || [])
     } else {
       // Reset to default visibility when no view is selected
       setVisibleColumns(getInitialColumnVisibility(apiColumns))
@@ -114,10 +114,10 @@ export function useColumnState(
         // Sync local state with the updated view configuration
         const newVisibility: Record<string, boolean> = {}
         apiColumns.forEach(column => {
-          newVisibility[column.field] = activeView.configuration.visible_columns.includes(column.field)
+          newVisibility[column.field] = activeView.configuration?.visible_columns?.includes(column.field) || false
         })
         setVisibleColumns(newVisibility)
-        setColumnOrder(activeView.configuration.column_order)
+        setColumnOrder(activeView.configuration?.column_order || [])
       }
     }
     
@@ -147,10 +147,14 @@ const DEFAULT_COLUMN_ORDER = 500
 function getInitialColumnVisibility(
   apiColumns: any[]
 ): Record<string, boolean> {
+  if (!apiColumns || apiColumns.length === 0) {
+    return {}
+  }
+  
   const visibility: Record<string, boolean> = {}
   
   apiColumns.forEach(column => {
-    visibility[column.field] = column.default_visible
+    visibility[column.field] = column.default_visible ?? true
   })
   
   return visibility
@@ -162,6 +166,10 @@ function getInitialColumnVisibility(
 function getInitialColumnOrder(
   apiColumns: any[]
 ): string[] {
+  if (!apiColumns || apiColumns.length === 0) {
+    return []
+  }
+  
   const sortedColumns = [...apiColumns].sort((a, b) => {
     const orderA = a.default_order ?? DEFAULT_COLUMN_ORDER
     const orderB = b.default_order ?? DEFAULT_COLUMN_ORDER

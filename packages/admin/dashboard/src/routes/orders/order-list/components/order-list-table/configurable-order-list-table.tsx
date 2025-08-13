@@ -1,7 +1,7 @@
 import { Container } from "@medusajs/ui"
 import { keepPreviousData } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
-import { useMemo } from "react"
+import { useMemo, useEffect } from "react"
 
 import { DataTable } from "../../../../../components/data-table"
 import { useOrders } from "../../../../../hooks/api/orders"
@@ -51,6 +51,7 @@ export const ConfigurableOrderListTable = () => {
 
   const filters = useOrderTableFilters()
   const columns = useOrderTableColumns({})
+
 
   // Handle view change
   const onViewChange = useMemo(() => {
