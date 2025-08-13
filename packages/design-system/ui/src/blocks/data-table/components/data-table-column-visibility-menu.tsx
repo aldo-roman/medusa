@@ -1,6 +1,4 @@
-"use client"
-
-import * as React from "react"
+import React from "react"
 import { Column } from "@tanstack/react-table"
 
 import { Checkbox } from "@/components/checkbox"
@@ -68,7 +66,7 @@ const DataTableColumnVisibilityMenu = ({
           }}
         >
           <div className="flex items-center gap-x-2">
-            <Checkbox 
+            <Checkbox
               checked={allColumnsVisible ? true : (someColumnsVisible && !allColumnsVisible) ? "indeterminate" : false}
             />
             <span>Toggle all</span>
