@@ -1,5 +1,3 @@
-"use client"
-
 import { CheckMini, EllipseMiniSolid, XMark, XMarkMini, MagnifyingGlass } from "@medusajs/icons"
 import * as React from "react"
 
@@ -44,90 +42,9 @@ const DEFAULT_RANGE_OPTION_END_LABEL = "Ending"
 const DataTableFilter = ({ id, filter, isNew = false, onUpdate, onRemove }: DataTableFilterProps) => {
   const { instance } = useDataTableContext()
 
-  // Store if this filter should open on mount
-  const [shouldOpenOnMount] = React.useState(() => isNew)
-
-  const [open, setOpen] = React.useState(false)
-  const [isCustom, setIsCustom] = React.useState(false)
-  const [hadPreviousValue, setHadPreviousValue] = React.useState(!shouldOpenOnMount)
+  // Initialize open state based on isNew prop
+  const [open, setOpen] = React.useState(isNew)
   const [hasInteracted, setHasInteracted] = React.useState(false)
-  const [previousFilter, setPreviousFilter] = React.useState(filter)
-  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Auto-open new filters after mount
-  React.useEffect(() => {
-    if (shouldOpenOnMount && !hasInteracted && !open) {
-      // Small delay to ensure proper positioning
-      const timer = setTimeout(() => {
-        setOpen(true)
-      }, 50)
-      return () => clearTimeout(timer)
-    }
-  }, [shouldOpenOnMount, hasInteracted, open])
-
-  const onOpenChange = React.useCallback(
-    (open: boolean) => {
-      setOpen(open)
-
-      // Update hadPreviousValue and hasInteracted if filter has value
-      if (filter &&
-        !(Array.isArray(filter) && filter.length === 0) &&
-        !(typeof filter === 'string' && filter === '')) {
-        setHadPreviousValue(true)
-        setHasInteracted(true)
-        setPreviousFilter(filter)
-      }
-
-      // Mark as interacted when closing
-      if (!open) {
-        setHasInteracted(true)
-      }
-
-      // Clear any existing timeout
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-
-      // If closing without a value, remove filter after delay
-      // For new filters (shouldOpenOnMount), remove immediately when closing without value
-      if (!open &&
-        (filter === null ||
-          filter === undefined ||
-          (Array.isArray(filter) && filter.length === 0) ||
-          (typeof filter === 'string' && filter === ''))) {
-        const delay = shouldOpenOnMount && !hasInteracted ? 0 : 200
-        timeoutRef.current = setTimeout(() => {
-          if (onRemove) {
-            onRemove()
-          } else {
-            instance.removeFilter(id)
-          }
-        }, delay)
-      }
-    },
-    [instance, id, filter, shouldOpenOnMount, hasInteracted, onRemove]
-  )
-
-  const removeFilter = React.useCallback(() => {
-    // Clear timeout if removing manually
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-    }
-    if (onRemove) {
-      onRemove()
-    } else {
-      instance.removeFilter(id)
-    }
-  }, [instance, id, onRemove])
-
-  // Cleanup timeout on unmount
-  React.useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-    }
-  }, [])
 
   const meta = instance.getFilterMeta(id)
 
@@ -155,34 +72,66 @@ const DataTableFilter = ({ id, filter, isNew = false, onUpdate, onRemove }: Data
     return true
   }, [filter])
 
-  const { displayValue, isCustomRange } = React.useMemo(() => {
-    // Use previous filter value if current filter is empty and popover is closing
-    const effectiveFilter = (hasValue || !open) ? filter : previousFilter
+  const onOpenChange = React.useCallback(
+    (newOpen: boolean) => {
+      setOpen(newOpen)
 
+      // Mark as interacted when user closes
+      if (!newOpen && open) {
+        setHasInteracted(true)
+      }
+
+      // If closing without a value, remove filter
+      // For new filters that haven't been interacted with, remove immediately
+      if (!newOpen && !hasValue) {
+        // Only remove if it's a new filter being closed without interaction,
+        // or if it's an existing filter with no value
+        if ((isNew && !hasInteracted) || !isNew) {
+          if (onRemove) {
+            onRemove()
+          } else {
+            instance.removeFilter(id)
+          }
+        }
+      }
+    },
+    [instance, id, open, hasInteracted, isNew, hasValue, onRemove]
+  )
+
+  const removeFilter = React.useCallback(() => {
+    if (onRemove) {
+      onRemove()
+    } else {
+      instance.removeFilter(id)
+    }
+  }, [instance, id, onRemove])
+
+  const { displayValue, isCustomRange } = React.useMemo(() => {
     let displayValue: string | null = null
     let isCustomRange = false
 
-    if (typeof effectiveFilter === "string") {
+    if (typeof filter === "string") {
       // For string filters without options, just show the value
       if (!options || options.length === 0) {
-        displayValue = effectiveFilter
+        displayValue = filter
       } else {
-        displayValue = options?.find((o: any) => o.value === effectiveFilter)?.label ?? null
+        displayValue = options?.find((o: any) => o.value === filter)?.label ?? null
       }
     }
 
-    if (typeof effectiveFilter === "number") {
-      displayValue = String(effectiveFilter)
+    if (typeof filter === "number") {
+      displayValue = String(filter)
     }
 
-    if (Array.isArray(effectiveFilter)) {
+    if (Array.isArray(filter)) {
       displayValue =
-        effectiveFilter
+        filter
           .map((v) => options?.find((o: any) => o.value === v)?.label)
           .join(", ") ?? null
     }
 
-    if (isDateComparisonOperator(effectiveFilter)) {
+    if (isDateComparisonOperator(filter)) {
+      // First check if it matches a predefined option
       displayValue =
         options?.find((o: any) => {
           if (!isDateComparisonOperator(o.value)) {
@@ -190,42 +139,40 @@ const DataTableFilter = ({ id, filter, isNew = false, onUpdate, onRemove }: Data
           }
 
           return (
-            !isCustom &&
-            (effectiveFilter.$gte === o.value.$gte || (!effectiveFilter.$gte && !o.value.$gte)) &&
-            (effectiveFilter.$lte === o.value.$lte || (!effectiveFilter.$lte && !o.value.$lte)) &&
-            (effectiveFilter.$gt === o.value.$gt || (!effectiveFilter.$gt && !o.value.$gt)) &&
-            (effectiveFilter.$lt === o.value.$lt || (!effectiveFilter.$lt && !o.value.$lt))
+            (filter.$gte === o.value.$gte || (!filter.$gte && !o.value.$gte)) &&
+            (filter.$lte === o.value.$lte || (!filter.$lte && !o.value.$lte)) &&
+            (filter.$gt === o.value.$gt || (!filter.$gt && !o.value.$gt)) &&
+            (filter.$lt === o.value.$lt || (!filter.$lt && !o.value.$lt))
           )
         })?.label ?? null
 
+      // If no match found, it's a custom range
       if (!displayValue && isDateFilterProps(meta)) {
+        isCustomRange = true
         const formatDateValue = meta.formatDateValue
           ? meta.formatDateValue
           : DEFAULT_FORMAT_DATE_VALUE
 
-        if (effectiveFilter.$gte && !effectiveFilter.$lte) {
-          isCustomRange = true
+        if (filter.$gte && !filter.$lte) {
           displayValue = `${meta.rangeOptionStartLabel || DEFAULT_RANGE_OPTION_START_LABEL
-            } ${formatDateValue(new Date(effectiveFilter.$gte))}`
+            } ${formatDateValue(new Date(filter.$gte))}`
         }
 
-        if (effectiveFilter.$lte && !effectiveFilter.$gte) {
-          isCustomRange = true
+        if (filter.$lte && !filter.$gte) {
           displayValue = `${meta.rangeOptionEndLabel || DEFAULT_RANGE_OPTION_END_LABEL
-            } ${formatDateValue(new Date(effectiveFilter.$lte))}`
+            } ${formatDateValue(new Date(filter.$lte))}`
         }
 
-        if (effectiveFilter.$gte && effectiveFilter.$lte) {
-          isCustomRange = true
+        if (filter.$gte && filter.$lte) {
           displayValue = `${formatDateValue(
-            new Date(effectiveFilter.$gte)
-          )} - ${formatDateValue(new Date(effectiveFilter.$lte))}`
+            new Date(filter.$gte)
+          )} - ${formatDateValue(new Date(filter.$lte))}`
         }
       }
     }
 
     // Handle number comparison operators
-    if (typeof effectiveFilter === "object" && effectiveFilter !== null && !Array.isArray(effectiveFilter) && !isDateComparisonOperator(effectiveFilter)) {
+    if (typeof filter === "object" && filter !== null && !Array.isArray(filter) && !isDateComparisonOperator(filter)) {
       const operators: Record<string, string> = {
         $eq: "=",
         $gt: ">",
@@ -234,9 +181,9 @@ const DataTableFilter = ({ id, filter, isNew = false, onUpdate, onRemove }: Data
         $lte: "≤",
       }
 
-      const op = Object.keys(effectiveFilter)[0]
+      const op = Object.keys(filter)[0]
       const opLabel = operators[op] || op
-      const value = (effectiveFilter as any)[op]
+      const value = (filter as any)[op]
 
       if (typeof value === "number") {
         displayValue = `${opLabel} ${value}`
@@ -244,13 +191,7 @@ const DataTableFilter = ({ id, filter, isNew = false, onUpdate, onRemove }: Data
     }
 
     return { displayValue, isCustomRange }
-  }, [filter, previousFilter, options, open, hasValue])
-
-  React.useEffect(() => {
-    if (isCustomRange && !isCustom) {
-      setIsCustom(true)
-    }
-  }, [isCustomRange, isCustom])
+  }, [filter, options, meta])
 
   return (
     <Popover open={open} onOpenChange={onOpenChange} modal>
@@ -260,18 +201,18 @@ const DataTableFilter = ({ id, filter, isNew = false, onUpdate, onRemove }: Data
           "txt-compact-small-plus shadow-borders-base"
         )}
       >
-        {!hadPreviousValue && <Popover.Anchor />}
+        {!hasValue && isNew && <Popover.Anchor />}
         <div
           className={clx(
             "flex items-center px-2 py-1 text-ui-fg-muted",
             {
-              "border-r": hasValue || hadPreviousValue
+              "border-r": hasValue
             }
           )}
         >
           {label || id}
         </div>
-        {(hasValue || hadPreviousValue) && (
+        {hasValue && (
           <>
             {(type === "select" || type === "multiselect" || type === "radio") && (
               <div className="flex items-center border-r px-2 py-1 text-ui-fg-muted">
@@ -311,21 +252,15 @@ const DataTableFilter = ({ id, filter, isNew = false, onUpdate, onRemove }: Data
         hideWhenDetached
         className="bg-ui-bg-component p-0 outline-none"
         onOpenAutoFocus={(e) => {
-          // Don't use preventDefault for auto-focus
-          // Let the natural focus flow work
-          if (shouldOpenOnMount) {
+          if (isNew) {
             // For new filters, ensure the first input gets focus
-            setTimeout(() => {
-              const content = e.currentTarget as HTMLElement
-              if (content) {
-                const firstInput = content.querySelector(
-                  'input:not([type="hidden"]), [role="list"][tabindex="0"]'
-                ) as HTMLElement
-                if (firstInput) {
-                  firstInput.focus()
-                }
-              }
-            }, 0)
+            const target = e.currentTarget as HTMLElement
+            if (target) {
+              const firstInput = target.querySelector(
+                'input:not([type="hidden"]), [role="list"][tabindex="0"]'
+              ) as HTMLElement | null
+              firstInput?.focus()
+            }
           }
         }}
         onCloseAutoFocus={(e) => {
@@ -348,7 +283,7 @@ const DataTableFilter = ({ id, filter, isNew = false, onUpdate, onRemove }: Data
                   id={id}
                   filter={filter as string[] | undefined}
                   options={options as DataTableFilterOption<string>[]}
-                  isNew={shouldOpenOnMount}
+                  isNew={isNew}
                   onUpdate={onUpdate}
                 />
               )
@@ -370,8 +305,7 @@ const DataTableFilter = ({ id, filter, isNew = false, onUpdate, onRemove }: Data
                   options={
                     options as DataTableFilterOption<DataTableDateComparisonOperator>[]
                   }
-                  isCustom={isCustom}
-                  setIsCustom={setIsCustom}
+                  isCustomRange={isCustomRange}
                   format={dateRest.format}
                   rangeOptionLabel={dateRest.rangeOptionLabel}
                   disableRangeOption={dateRest.disableRangeOption}
@@ -437,8 +371,7 @@ type DataTableFilterDateContentProps = {
   id: string
   filter: unknown
   options: DataTableFilterOption<DataTableDateComparisonOperator>[]
-  isCustom: boolean
-  setIsCustom: (isCustom: boolean) => void
+  isCustomRange: boolean
   onUpdate?: (value: unknown) => void
 } & Pick<
   DataTableDateFilterProps,
@@ -458,12 +391,17 @@ const DataTableFilterDateContent = ({
   rangeOptionStartLabel = DEFAULT_RANGE_OPTION_START_LABEL,
   rangeOptionEndLabel = DEFAULT_RANGE_OPTION_END_LABEL,
   disableRangeOption = false,
-  isCustom,
-  setIsCustom,
+  isCustomRange,
   onUpdate,
 }: DataTableFilterDateContentProps) => {
   const currentValue = filter as DataTableDateComparisonOperator | undefined
   const { instance } = useDataTableContext()
+  const [isCustom, setIsCustom] = React.useState(isCustomRange)
+
+  // Sync isCustom state when isCustomRange changes
+  React.useEffect(() => {
+    setIsCustom(isCustomRange)
+  }, [isCustomRange])
 
   const selectedValue = React.useMemo(() => {
     if (!currentValue || isCustom) {
@@ -489,12 +427,8 @@ const DataTableFilterDateContent = ({
 
   const onSelectCustom = React.useCallback(() => {
     setIsCustom(true)
-    if (onUpdate) {
-      onUpdate(undefined)
-    } else {
-      instance.updateFilter({ id, value: undefined })
-    }
-  }, [instance, id, onUpdate])
+    // Don't clear the value when selecting custom - keep the current value
+  }, [])
 
   const onCustomValueChange = React.useCallback(
     (input: "$gte" | "$lte", value: Date | null) => {
