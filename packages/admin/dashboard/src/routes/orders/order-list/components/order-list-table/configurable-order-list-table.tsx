@@ -66,9 +66,12 @@ export const ConfigurableOrderListTable = () => {
     handleViewChange: originalHandleViewChange,
   } = useColumnState(apiColumns, currentActiveView)
 
-  // Wrap handleViewChange to manage transition state and apply view configuration
-  const handleViewChange = useCallback((view: any) => {
-    originalHandleViewChange(view, apiColumns || [])
+  // React to activeView changes
+  useEffect(() => {
+    if (!apiColumns) return
+    
+    // Apply view configuration when activeView changes
+    originalHandleViewChange(currentActiveView, apiColumns)
 
     // Apply the view's filters, sorting, and search to URL params
     setSearchParams((prev) => {
@@ -78,9 +81,9 @@ export const ConfigurableOrderListTable = () => {
       )
       keysToDelete.forEach(key => prev.delete(key))
 
-      if (view) {
+      if (currentActiveView) {
         // Apply view's configuration
-        const viewConfig = view.configuration
+        const viewConfig = currentActiveView.configuration
 
         // Apply filters
         if (viewConfig.filters) {
@@ -105,7 +108,7 @@ export const ConfigurableOrderListTable = () => {
 
       return prev
     })
-  }, [originalHandleViewChange, setSearchParams, apiColumns])
+  }, [currentActiveView, apiColumns])
 
   // Debounced state for configuration changes
   const [debouncedHasConfigChanged, setDebouncedHasConfigChanged] = useState(false)
@@ -215,24 +218,47 @@ export const ConfigurableOrderListTable = () => {
 
   // Handler to reset configuration back to active view
   const handleClearConfiguration = useCallback(() => {
-    if (currentActiveView) {
-      // Reset to active view's configuration
-      handleViewChange(currentActiveView)
-    } else {
-      // No active view - clear all configuration including URL params
-      handleViewChange(null)
-
-      // Clear all query parameters
-      setSearchParams((prev) => {
-        // Remove all parameters with our prefix
-        const keysToDelete = Array.from(prev.keys()).filter(key =>
-          key.startsWith(QUERY_PREFIX + "_") || key === QUERY_PREFIX + "_q" || key === QUERY_PREFIX + "_order"
-        )
-        keysToDelete.forEach(key => prev.delete(key))
-        return prev
-      })
+    // Re-apply the current active view configuration
+    if (apiColumns) {
+      originalHandleViewChange(currentActiveView, apiColumns)
     }
-  }, [currentActiveView, handleViewChange, setSearchParams])
+
+    // Clear all query parameters and re-apply from active view
+    setSearchParams((prev) => {
+      // Remove all parameters with our prefix
+      const keysToDelete = Array.from(prev.keys()).filter(key =>
+        key.startsWith(QUERY_PREFIX + "_") || key === QUERY_PREFIX + "_q" || key === QUERY_PREFIX + "_order"
+      )
+      keysToDelete.forEach(key => prev.delete(key))
+
+      if (currentActiveView?.configuration) {
+        // Re-apply view's configuration
+        const viewConfig = currentActiveView.configuration
+
+        // Apply filters
+        if (viewConfig.filters) {
+          Object.entries(viewConfig.filters).forEach(([key, value]) => {
+            prev.set(`${QUERY_PREFIX}_${key}`, JSON.stringify(value))
+          })
+        }
+
+        // Apply sorting
+        if (viewConfig.sorting) {
+          const sortValue = viewConfig.sorting.desc
+            ? `-${viewConfig.sorting.id}`
+            : viewConfig.sorting.id
+          prev.set(`${QUERY_PREFIX}_order`, sortValue)
+        }
+
+        // Apply search
+        if (viewConfig.search) {
+          prev.set(`${QUERY_PREFIX}_q`, viewConfig.search)
+        }
+      }
+
+      return prev
+    })
+  }, [currentActiveView, apiColumns])
 
   // Get current configuration for save button
   const currentConfiguration = useMemo(() => {
@@ -356,7 +382,6 @@ export const ConfigurableOrderListTable = () => {
         onColumnOrderChange={setColumnOrder}
         enableViewSelector={isViewConfigEnabled}
         entity="orders"
-        onViewChange={handleViewChange}
         currentColumns={currentColumns}
         filterBarContent={filterBarContent}
         rowHref={(row) => `/orders/${row.id}`}
@@ -380,9 +405,6 @@ export const ConfigurableOrderListTable = () => {
             setSaveDialogOpen(false)
             setEditingView(null)
             // The view will be automatically set as active if set_active was true
-            if (newView) {
-              handleViewChange(newView)
-            }
           }}
         />
       )}

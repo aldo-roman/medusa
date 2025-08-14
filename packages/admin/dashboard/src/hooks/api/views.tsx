@@ -205,8 +205,6 @@ export const useSetActiveViewConfiguration = (
     },
     ...options,
     onSuccess: async (data, variables, context) => {
-      console.log("active view success");
-
       // Invalidate active configuration
       await queryClient.invalidateQueries({
         queryKey: [...viewsQueryKeys.detail(entity, "active")]

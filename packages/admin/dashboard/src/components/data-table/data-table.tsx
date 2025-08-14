@@ -92,7 +92,6 @@ interface DataTableProps<TData> {
   onColumnOrderChange?: (order: ColumnOrderState) => void
   enableViewSelector?: boolean
   entity?: string
-  onViewChange?: (view: any) => void
   currentColumns?: {
     visible: string[]
     order: string[]
@@ -128,7 +127,6 @@ export const DataTable = <TData,>({
   onColumnOrderChange,
   enableViewSelector = false,
   entity,
-  onViewChange,
   currentColumns,
   filterBarContent,
 }: DataTableProps<TData>) => {
@@ -377,7 +375,6 @@ export const DataTable = <TData,>({
             {effectiveEnableViewSelector && entity && (
               <ViewPills
                 entity={entity}
-                onViewChange={onViewChange}
                 currentColumns={currentColumns}
                 currentConfiguration={currentConfiguration}
               />

@@ -64,15 +64,12 @@ export const useViewConfigurations = (entity: string) => {
   // Set active view mutation
   const setActiveView = useSetActiveViewConfigurationBase(entity, {
     onSuccess: () => {
-      console.log("success")
       toast.success("Active view updated")
     },
     onError: (error) => {
       handleError(error, "Failed to update active view")
     },
   })
-
-  console.log("active in hooks", activeView)
 
   return useMemo(() => ({
     // Feature flag state
