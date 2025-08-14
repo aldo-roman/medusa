@@ -9,7 +9,7 @@ import { useOrders } from "../../../../../hooks/api/orders"
 import { useConfigurableOrderTableColumns } from "../../../../../hooks/table/columns/use-configurable-order-table-columns"
 import { useOrderTableFilters } from "./use-order-table-filters"
 import { useOrderTableQuery } from "../../../../../hooks/table/query/use-order-table-query"
-import { useViewConfigurations } from "../../../../../hooks/use-view-configurations"
+import { useViewConfigurations, useViewConfiguration } from "../../../../../hooks/use-view-configurations"
 import { useEntityColumns } from "../../../../../hooks/api/views"
 import { useFeatureFlag } from "../../../../../providers/feature-flag-provider"
 import { useColumnState } from "../../../../../hooks/table/columns/use-column-state"
@@ -38,6 +38,9 @@ export const ConfigurableOrderListTable = () => {
   } = useViewConfigurations("orders")
 
   const currentActiveView = activeView?.view_configuration || null
+
+  // Get update mutation for the current active view
+  const { updateView } = useViewConfiguration("orders", currentActiveView?.id || "")
 
   // Get columns from API
   const { columns: apiColumns, isLoading: isLoadingColumns } = useEntityColumns("orders", {
@@ -282,10 +285,44 @@ export const ConfigurableOrderListTable = () => {
 
   const handleSaveAsDefault = async () => {
     try {
-      await createView.mutateAsync({
-        name: "Default",
-        is_system_default: true,
-        set_active: true,
+      if (currentActiveView?.is_system_default) {
+        // Update existing system default
+        await updateView.mutateAsync({
+          name: currentActiveView.name,
+          configuration: {
+            visible_columns: currentColumns.visible,
+            column_order: currentColumns.order,
+            filters: currentConfiguration.filters || {},
+            sorting: currentConfiguration.sorting || null,
+            search: currentConfiguration.search || "",
+          }
+        })
+      } else {
+        // Create new system default
+        await createView.mutateAsync({
+          name: "Default",
+          is_system_default: true,
+          set_active: true,
+          configuration: {
+            visible_columns: currentColumns.visible,
+            column_order: currentColumns.order,
+            filters: currentConfiguration.filters || {},
+            sorting: currentConfiguration.sorting || null,
+            search: currentConfiguration.search || "",
+          }
+        })
+      }
+    } catch (error) {
+      // Error is handled by the hook
+    }
+  }
+
+  const handleUpdateExisting = async () => {
+    if (!currentActiveView) return
+
+    try {
+      await updateView.mutateAsync({
+        name: currentActiveView.name,
         configuration: {
           visible_columns: currentColumns.visible,
           column_order: currentColumns.order,
@@ -297,14 +334,6 @@ export const ConfigurableOrderListTable = () => {
     } catch (error) {
       // Error is handled by the hook
     }
-  }
-
-  const handleUpdateExisting = async () => {
-    if (!currentActiveView) return
-
-    // For now, open the save dialog to update
-    setEditingView(currentActiveView)
-    setSaveDialogOpen(true)
   }
 
   const handleSaveAsNew = () => {
@@ -327,7 +356,7 @@ export const ConfigurableOrderListTable = () => {
         {t("actions.clear")}
       </Button>
       <SaveViewDropdown
-        isDefaultView={!currentActiveView}
+        isDefaultView={currentActiveView?.is_system_default || !currentActiveView}
         currentViewId={currentActiveView?.id}
         currentViewName={currentActiveView?.name}
         onSaveAsDefault={handleSaveAsDefault}

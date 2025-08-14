@@ -23,9 +23,9 @@ export const SaveViewDropdown: React.FC<SaveViewDropdownProps> = ({
 
   const handleSaveAsDefault = async () => {
     const result = await prompt({
-      title: "Save as default view",
+      title: "Update default view",
       description: "This will update the default view for all users. Are you sure?",
-      confirmText: "Save as default",
+      confirmText: "Update for everyone",
       cancelText: "Cancel",
     })
 
@@ -59,7 +59,7 @@ export const SaveViewDropdown: React.FC<SaveViewDropdownProps> = ({
         {isDefaultView ? (
           <>
             <DropdownMenu.Item onClick={handleSaveAsDefault}>
-              Save as default for everyone
+              Update default for everyone
             </DropdownMenu.Item>
             <DropdownMenu.Item onClick={onSaveAsNew}>
               Save as new view
