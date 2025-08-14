@@ -13,7 +13,6 @@ import {
   DataTableFilteringState,
   DataTablePaginationState,
   DataTableSortingState,
-  clx,
 } from "@medusajs/ui"
 import React, { ReactNode, useCallback, useMemo } from "react"
 import { useTranslation } from "react-i18next"

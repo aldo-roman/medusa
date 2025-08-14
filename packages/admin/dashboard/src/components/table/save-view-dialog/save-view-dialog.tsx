@@ -118,7 +118,6 @@ export const SaveViewDialog: React.FC<SaveViewDialogProps> = ({
 
         // Only include name if provided (not required for system defaults)
         const createData: any = {
-          entity,
           is_system_default: data.isSystemDefault,
           set_active: true, // Always set newly created view as active
           configuration: {

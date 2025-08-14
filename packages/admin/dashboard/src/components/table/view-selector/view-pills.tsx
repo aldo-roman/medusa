@@ -40,8 +40,8 @@ export const ViewPills: React.FC<ViewPillsProps> = ({
     setActiveView,
     isDefaultViewActive,
   } = useViewConfigurations(entity)
-  
-  const views = listViews.data?.view_configurations || []
+
+  const views = listViews?.view_configurations || []
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [editingView, setEditingView] = useState<ViewConfiguration | null>(null)
@@ -50,7 +50,9 @@ export const ViewPills: React.FC<ViewPillsProps> = ({
   const [deletingViewId, setDeletingViewId] = useState<string | null>(null)
   const prompt = usePrompt()
 
-  const currentActiveView = activeView.data?.view_configuration || null
+  const currentActiveView = activeView?.view_configuration || null
+
+  console.log("Current active view:", currentActiveView, isDefaultViewActive)
 
   // Track if we've notified parent of initial view
   const hasNotifiedInitialView = useRef(false)
@@ -60,7 +62,7 @@ export const ViewPills: React.FC<ViewPillsProps> = ({
 
   // Notify parent of initial view once
   useEffect(() => {
-    if (!hasNotifiedInitialView.current && activeView.isSuccess) {
+    if (!hasNotifiedInitialView.current && activeView) {
       hasNotifiedInitialView.current = true
       // Use setTimeout to ensure this happens after render
       setTimeout(() => {
@@ -69,24 +71,30 @@ export const ViewPills: React.FC<ViewPillsProps> = ({
         }
       }, 0)
     }
-  }, [activeView.isSuccess, currentActiveView]) // Remove onViewChange from dependencies
+  }, [activeView, currentActiveView]) // Remove onViewChange from dependencies
 
   const handleViewSelect = async (viewId: string | null) => {
-    if (viewId === null) {
-      // Select default view - clear the active view
-      await setActiveView.mutateAsync(null)
-      if (onViewChange) {
-        onViewChange(null)
+    try {
+      if (viewId === null) {
+        // Select default view - clear the active view
+        console.log("Setting active view to null (default)")
+        await setActiveView.mutateAsync(null)
+        if (onViewChange) {
+          onViewChange(null)
+        }
+        return
       }
-      return
-    }
 
-    const view = views.find(v => v.id === viewId)
-    if (view) {
-      await setActiveView.mutateAsync(viewId)
-      if (onViewChange) {
-        onViewChange(view)
+      const view = views.find(v => v.id === viewId)
+      if (view) {
+        console.log("Setting active view to:", viewId)
+        await setActiveView.mutateAsync(viewId)
+        if (onViewChange) {
+          onViewChange(view)
+        }
       }
+    } catch (error) {
+      console.error("Error in handleViewSelect:", error)
     }
   }
 

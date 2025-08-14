@@ -11,10 +11,12 @@ import { Modules } from "@medusajs/framework/utils"
 
 export const GET = async (
   req: AuthenticatedMedusaRequest<AdminGetActiveViewConfigurationParamsType>,
-  res: MedusaResponse<HttpTypes.AdminViewConfigurationResponse & {
-    is_default_active?: boolean
-    default_type?: "system" | "code"
-  }>
+  res: MedusaResponse<
+    HttpTypes.AdminViewConfigurationResponse & {
+      is_default_active?: boolean
+      default_type?: "system" | "code"
+    }
+  >
 ) => {
   const settingsService: any = req.scope.resolve(Modules.SETTINGS)
 
@@ -28,22 +30,13 @@ export const GET = async (
     res.json({
       view_configuration: null,
       is_default_active: true,
-      default_type: "code"
+      default_type: "code",
     })
   } else {
-    // Check if the user has an explicit preference
-    const activeViewPref = await settingsService.getUserPreference(
-      req.auth_context.actor_id,
-      `active_view.${req.params.entity}`
-    )
-    
-    // If there's no preference and the view is a system default, it means we're falling back to system default
-    const isDefaultActive = !activeViewPref && viewConfiguration.is_system_default
-    
-    res.json({ 
+    res.json({
       view_configuration: viewConfiguration,
-      is_default_active: isDefaultActive,
-      default_type: isDefaultActive && viewConfiguration.is_system_default ? "system" : undefined
+      is_default_active: viewConfiguration.is_system_default,
+      default_type: viewConfiguration.is_system_default ? "system" : undefined,
     })
   }
 }

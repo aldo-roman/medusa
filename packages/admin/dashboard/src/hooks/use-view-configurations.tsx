@@ -17,8 +17,6 @@ export type ViewConfiguration = HttpTypes.AdminViewConfiguration
 
 // Common error handler
 const handleError = (error: Error, message?: string) => {
-  console.error("View configuration error:", error)
-  
   let errorMessage = message
   if (!errorMessage) {
     if (error instanceof FetchError) {
@@ -29,13 +27,13 @@ const handleError = (error: Error, message?: string) => {
       errorMessage = "An error occurred"
     }
   }
-  
+
   toast.error(errorMessage)
 }
 
 export const useViewConfigurations = (entity: string) => {
   const isViewConfigEnabled = useFeatureFlag("view_configurations")
-  
+
   // List views
   const listViews = useViewConfigurationsBase(entity, { limit: 100 }, {
     enabled: isViewConfigEnabled && !!entity,
@@ -66,6 +64,7 @@ export const useViewConfigurations = (entity: string) => {
   // Set active view mutation
   const setActiveView = useSetActiveViewConfigurationBase(entity, {
     onSuccess: () => {
+      console.log("success")
       toast.success("Active view updated")
     },
     onError: (error) => {
@@ -73,20 +72,22 @@ export const useViewConfigurations = (entity: string) => {
     },
   })
 
+  console.log("active in hooks", activeView)
+
   return useMemo(() => ({
     // Feature flag state
     isViewConfigEnabled,
-    
+
     // Query results
     listViews,
     activeView,
-    
+
     // Mutations
     createView,
     setActiveView,
-    
+
     // Helper to check if default view is active
-    isDefaultViewActive: activeView.data?.is_default_active ?? true,
+    isDefaultViewActive: activeView?.is_default_active ?? true,
   }), [
     isViewConfigEnabled,
     listViews,
