@@ -1,5 +1,13 @@
 # Change Log
 
+## 2.9.1
+
+### Patch Changes
+
+- Updated dependencies [[`34c3c14e0a1491ab80473605018b97981544167d`](https://github.com/medusajs/medusa/commit/34c3c14e0a1491ab80473605018b97981544167d)]:
+  - @medusajs/medusa@2.9.1
+  - @medusajs/framework@2.9.1
+
 ## 2.9.0
 
 ### Patch Changes

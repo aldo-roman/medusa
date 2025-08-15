@@ -1,5 +1,12 @@
 # Change Log
 
+## 2.9.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @medusajs/telemetry@2.9.1
+
 ## 2.9.0
 
 ### Patch Changes

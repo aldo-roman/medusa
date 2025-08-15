@@ -1,5 +1,17 @@
 # @medusajs/dashboard
 
+## 2.9.1
+
+### Patch Changes
+
+- [#13208](https://github.com/medusajs/medusa/pull/13208) [`4b3c43fe92d99a98b3d7b9ee6705114de01cbc5d`](https://github.com/medusajs/medusa/commit/4b3c43fe92d99a98b3d7b9ee6705114de01cbc5d) Thanks [@willbouch](https://github.com/willbouch)! - feat(dashboard, js-sdk): shipping option type mngmt dashboard
+
+- Updated dependencies [[`4b3c43fe92d99a98b3d7b9ee6705114de01cbc5d`](https://github.com/medusajs/medusa/commit/4b3c43fe92d99a98b3d7b9ee6705114de01cbc5d)]:
+  - @medusajs/admin-shared@2.9.1
+  - @medusajs/js-sdk@2.9.1
+  - @medusajs/icons@2.9.1
+  - @medusajs/ui@4.0.20
+
 ## 2.9.0
 
 ### Patch Changes

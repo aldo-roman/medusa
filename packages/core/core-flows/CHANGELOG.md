@@ -1,5 +1,14 @@
 # @medusajs/core-flows
 
+## 2.9.1
+
+### Patch Changes
+
+- [#13191](https://github.com/medusajs/medusa/pull/13191) [`34c3c14e0a1491ab80473605018b97981544167d`](https://github.com/medusajs/medusa/commit/34c3c14e0a1491ab80473605018b97981544167d) Thanks [@willbouch](https://github.com/willbouch)! - chore(types, api): support shipping option type api endpoints
+
+- Updated dependencies []:
+  - @medusajs/framework@2.9.1
+
 ## 2.9.0
 
 ### Minor Changes
